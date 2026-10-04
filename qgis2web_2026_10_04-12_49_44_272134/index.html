@@ -1,0 +1,742 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <link rel="stylesheet" href="css/leaflet.css">
+        <link rel="stylesheet" href="css/L.Control.Layers.Tree.css">
+        <link rel="stylesheet" href="css/L.Control.Locate.min.css">
+        <link rel="stylesheet" href="css/qgis2web.css">
+        <link rel="stylesheet" href="css/fontawesome-all.min.css">
+        <link rel="stylesheet" href="css/leaflet.photon.css">
+        <style>
+        #map {
+            width: 982px;
+            height: 555px;
+        }
+        </style>
+        <title></title>
+    </head>
+    <body>
+        <div id="map">
+        </div>
+        <script src="js/qgis2web_expressions.js"></script>
+        <script src="js/leaflet.js"></script>
+        <script src="js/L.Control.Layers.Tree.min.js"></script>
+        <script src="js/L.Control.Locate.min.js"></script>
+        <script src="js/leaflet.rotatedMarker.js"></script>
+        <script src="js/leaflet.pattern.js"></script>
+        <script src="js/leaflet-hash.js"></script>
+        <script src="js/Autolinker.min.js"></script>
+        <script src="js/rbush.min.js"></script>
+        <script src="js/labelgun.min.js"></script>
+        <script src="js/labels.js"></script>
+        <script src="js/leaflet.photon.js"></script>
+        <script src="data/harigami_shusei_5.js"></script>
+        <script src="data/jyutaku_chi_6.js"></script>
+        <script src="data/ru_7.js"></script>
+        <script src="data/aomaru_8.js"></script>
+        <script src="data/kousakuchi_johou_9.js"></script>
+        <script src="data/suiro_line_10.js"></script>
+        <script src="data/owarihantei_11.js"></script>
+        <script src="data/20260906TanakaSenseiGakkou_12.js"></script>
+        <script>
+        var highlightLayer;
+        function highlightFeature(e) {
+            highlightLayer = e.target;
+            highlightLayer.openPopup();
+        }
+        var map = L.map('map', {
+            zoomControl:false, maxZoom:28, minZoom:1
+        }).fitBounds([[35.01715343296846,135.76942359479528],[35.03304181979133,135.80380704863794]]);
+        var hash = new L.Hash(map);
+        map.attributionControl.setPrefix('<a href="https://github.com/qgis2web/qgis2web" target="_blank">qgis2web</a> &middot; <a href="https://leafletjs.com" title="A JS library for interactive maps">Leaflet</a> &middot; <a href="https://qgis.org">QGIS</a>');
+        var autolinker = new Autolinker({truncate: {length: 30, location: 'smart'}});
+        // remove popup's row if "visible-with-data"
+        function removeEmptyRowsFromPopupContent(content, feature) {
+         var tempDiv = document.createElement('div');
+         tempDiv.innerHTML = content;
+         var rows = tempDiv.querySelectorAll('tr');
+         for (var i = 0; i < rows.length; i++) {
+             var td = rows[i].querySelector('td.visible-with-data');
+             var key = td ? td.id : '';
+             if (td && td.classList.contains('visible-with-data') && feature.properties[key] == null) {
+                 rows[i].parentNode.removeChild(rows[i]);
+             }
+         }
+         return tempDiv.innerHTML;
+        }
+        // modify popup if contains media
+        function addClassToPopupIfMedia(content, popup) {
+            var tempDiv = document.createElement('div');
+            tempDiv.innerHTML = content;
+            var imgTd = tempDiv.querySelector('td img');
+            if (imgTd) {
+                var src = imgTd.getAttribute('src');
+                if (/\.(jpg|jpeg|png|gif|bmp|webp|avif)$/i.test(src)) {
+                    popup._contentNode.classList.add('media');
+                    var img = popup._contentNode.querySelector('td img');
+                    if (img) {
+                        // If already loaded (cache), update immediately
+                        if (img.complete && img.naturalHeight > 0) {
+                            popup.update();
+                        } else {
+                            img.addEventListener('load', function() {
+                                popup.update();
+                            });
+                            img.addEventListener('error', function() {
+                                popup.update();
+                            });
+                        }
+                    }
+                } else if (/\.(mp3|wav|ogg|aac)$/i.test(src)) {
+                    var audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = src;
+                    imgTd.parentNode.replaceChild(audio, imgTd);
+                    popup._contentNode.classList.add('media');
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else if (/\.(mp4|webm|ogg|mov)$/i.test(src)) {
+                    var video = document.createElement('video');
+                    video.controls = true;
+                    video.src = src;
+                    video.style.width = "400px";
+                    video.style.height = "300px";
+                    video.style.maxHeight = "60vh";
+                    video.style.maxWidth = "60vw";
+                    imgTd.parentNode.replaceChild(video, imgTd);
+                    popup._contentNode.classList.add('media');
+                    // Aggiorna il popup quando il video carica i metadati
+                    video.addEventListener('loadedmetadata', function() {
+                        popup.update();
+                    });
+                    setTimeout(function() {
+                        popup.setContent(tempDiv.innerHTML);
+                        popup.update();
+                    }, 10);
+                } else {
+                    popup._contentNode.classList.remove('media');
+                }
+            } else {
+                popup._contentNode.classList.remove('media');
+            }
+        }
+        var zoomControl = L.control.zoom({
+            position: 'topleft'
+        }).addTo(map);
+        L.control.locate({locateOptions: {maxZoom: 19}}).addTo(map);
+        var bounds_group = new L.featureGroup([]);
+        function setBounds() {
+        }
+        map.createPane('pane_OpenStreetMap_0');
+        map.getPane('pane_OpenStreetMap_0').style.zIndex = 400;
+        var layer_OpenStreetMap_0 = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            pane: 'pane_OpenStreetMap_0',
+            opacity: 0.6,
+            attribution: '',
+            minZoom: 1,
+            maxZoom: 28,
+            minNativeZoom: 0,
+            maxNativeZoom: 19
+        });
+        layer_OpenStreetMap_0;
+        map.addLayer(layer_OpenStreetMap_0);
+        map.createPane('pane_kokudochirin_yosida_1950_modified_1');
+        map.getPane('pane_kokudochirin_yosida_1950_modified_1').style.zIndex = 401;
+        var img_kokudochirin_yosida_1950_modified_1 = 'data/kokudochirin_yosida_1950_modified_1.png';
+        var img_bounds_kokudochirin_yosida_1950_modified_1 = [[35.01787303304485,135.76803513508997],[35.030722690506906,135.80009403407348]];
+        var layer_kokudochirin_yosida_1950_modified_1 = new L.imageOverlay(img_kokudochirin_yosida_1950_modified_1,
+                                              img_bounds_kokudochirin_yosida_1950_modified_1,
+                                              {pane: 'pane_kokudochirin_yosida_1950_modified_1'});
+        bounds_group.addLayer(layer_kokudochirin_yosida_1950_modified_1);
+        map.addLayer(layer_kokudochirin_yosida_1950_modified_1);
+        map.createPane('pane_kokudochirin_yosida_1969_modified_2');
+        map.getPane('pane_kokudochirin_yosida_1969_modified_2').style.zIndex = 402;
+        var img_kokudochirin_yosida_1969_modified_2 = 'data/kokudochirin_yosida_1969_modified_2.png';
+        var img_bounds_kokudochirin_yosida_1969_modified_2 = [[35.018222291120935,135.76745964823533],[35.03067187147044,135.7956436452599]];
+        var layer_kokudochirin_yosida_1969_modified_2 = new L.imageOverlay(img_kokudochirin_yosida_1969_modified_2,
+                                              img_bounds_kokudochirin_yosida_1969_modified_2,
+                                              {pane: 'pane_kokudochirin_yosida_1969_modified_2'});
+        bounds_group.addLayer(layer_kokudochirin_yosida_1969_modified_2);
+        map.addLayer(layer_kokudochirin_yosida_1969_modified_2);
+        map.createPane('pane_kokudochirin_yosida_1978_modified_3');
+        map.getPane('pane_kokudochirin_yosida_1978_modified_3').style.zIndex = 403;
+        var img_kokudochirin_yosida_1978_modified_3 = 'data/kokudochirin_yosida_1978_modified_3.png';
+        var img_bounds_kokudochirin_yosida_1978_modified_3 = [[35.0183257068412,135.76857169018768],[35.03011895393123,135.79721472749304]];
+        var layer_kokudochirin_yosida_1978_modified_3 = new L.imageOverlay(img_kokudochirin_yosida_1978_modified_3,
+                                              img_bounds_kokudochirin_yosida_1978_modified_3,
+                                              {pane: 'pane_kokudochirin_yosida_1978_modified_3'});
+        bounds_group.addLayer(layer_kokudochirin_yosida_1978_modified_3);
+        map.addLayer(layer_kokudochirin_yosida_1978_modified_3);
+        map.createPane('pane_yoshidamurakozu_FIX_4');
+        map.getPane('pane_yoshidamurakozu_FIX_4').style.zIndex = 404;
+        var img_yoshidamurakozu_FIX_4 = 'data/yoshidamurakozu_FIX_4.png';
+        var img_bounds_yoshidamurakozu_FIX_4 = [[35.01761782922341,135.77034945809552],[35.03031848754923,135.79145584371815]];
+        var layer_yoshidamurakozu_FIX_4 = new L.imageOverlay(img_yoshidamurakozu_FIX_4,
+                                              img_bounds_yoshidamurakozu_FIX_4,
+                                              {pane: 'pane_yoshidamurakozu_FIX_4'});
+        bounds_group.addLayer(layer_yoshidamurakozu_FIX_4);
+        map.addLayer(layer_yoshidamurakozu_FIX_4);
+        function pop_harigami_shusei_5(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['fid'] !== null ? autolinker.link(String(feature.properties['fid']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['id'] !== null ? autolinker.link(String(feature.properties['id']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_harigami_shusei_5_0() {
+            return {
+                pane: 'pane_harigami_shusei_5',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(183,72,75,1.0)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_harigami_shusei_5');
+        map.getPane('pane_harigami_shusei_5').style.zIndex = 405;
+        map.getPane('pane_harigami_shusei_5').style['mix-blend-mode'] = 'normal';
+        var layer_harigami_shusei_5 = new L.geoJson(json_harigami_shusei_5, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_harigami_shusei_5',
+            layerName: 'layer_harigami_shusei_5',
+            pane: 'pane_harigami_shusei_5',
+            onEachFeature: pop_harigami_shusei_5,
+            style: style_harigami_shusei_5_0,
+        });
+        bounds_group.addLayer(layer_harigami_shusei_5);
+        map.addLayer(layer_harigami_shusei_5);
+        function pop_jyutaku_chi_6(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['fid'] !== null ? autolinker.link(String(feature.properties['fid']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['id'] !== null ? autolinker.link(String(feature.properties['id']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['名前'] !== null ? autolinker.link(String(feature.properties['名前']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['間口'] !== null ? autolinker.link(String(feature.properties['間口']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_jyutaku_chi_6_0() {
+            return {
+                pane: 'pane_jyutaku_chi_6',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(190,207,80,1.0)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_jyutaku_chi_6');
+        map.getPane('pane_jyutaku_chi_6').style.zIndex = 406;
+        map.getPane('pane_jyutaku_chi_6').style['mix-blend-mode'] = 'normal';
+        var layer_jyutaku_chi_6 = new L.geoJson(json_jyutaku_chi_6, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_jyutaku_chi_6',
+            layerName: 'layer_jyutaku_chi_6',
+            pane: 'pane_jyutaku_chi_6',
+            onEachFeature: pop_jyutaku_chi_6,
+            style: style_jyutaku_chi_6_0,
+        });
+        bounds_group.addLayer(layer_jyutaku_chi_6);
+        map.addLayer(layer_jyutaku_chi_6);
+        function pop_ru_7(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['fid'] !== null ? autolinker.link(String(feature.properties['fid']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['連番'] !== null ? autolinker.link(String(feature.properties['連番']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['小字名'] !== null ? autolinker.link(String(feature.properties['小字名']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['納入先'] !== null ? autolinker.link(String(feature.properties['納入先']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['名受人'] !== null ? autolinker.link(String(feature.properties['名受人']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_ru_7_0() {
+            return {
+                pane: 'pane_ru_7',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(196,60,57,1.0)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_ru_7');
+        map.getPane('pane_ru_7').style.zIndex = 407;
+        map.getPane('pane_ru_7').style['mix-blend-mode'] = 'normal';
+        var layer_ru_7 = new L.geoJson(json_ru_7, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_ru_7',
+            layerName: 'layer_ru_7',
+            pane: 'pane_ru_7',
+            onEachFeature: pop_ru_7,
+            style: style_ru_7_0,
+        });
+        bounds_group.addLayer(layer_ru_7);
+        map.addLayer(layer_ru_7);
+        function pop_aomaru_8(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['fid'] !== null ? autolinker.link(String(feature.properties['fid']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['id'] !== null ? autolinker.link(String(feature.properties['id']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_aomaru_8_0() {
+            return {
+                pane: 'pane_aomaru_8',
+                radius: 4.0,
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1,
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(0,227,255,1.0)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_aomaru_8');
+        map.getPane('pane_aomaru_8').style.zIndex = 408;
+        map.getPane('pane_aomaru_8').style['mix-blend-mode'] = 'normal';
+        var layer_aomaru_8 = new L.geoJson(json_aomaru_8, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_aomaru_8',
+            layerName: 'layer_aomaru_8',
+            pane: 'pane_aomaru_8',
+            onEachFeature: pop_aomaru_8,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.circleMarker(latlng, style_aomaru_8_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_aomaru_8);
+        map.addLayer(layer_aomaru_8);
+        function pop_kousakuchi_johou_9(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['fid'] !== null ? autolinker.link(String(feature.properties['fid']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['id'] !== null ? autolinker.link(String(feature.properties['id']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['小字名'] !== null ? autolinker.link(String(feature.properties['小字名']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['地番'] !== null ? autolinker.link(String(feature.properties['地番']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['納入先'] !== null ? autolinker.link(String(feature.properties['納入先']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['反'] !== null ? autolinker.link(String(feature.properties['反']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['畝'] !== null ? autolinker.link(String(feature.properties['畝']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['歩'] !== null ? autolinker.link(String(feature.properties['歩']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['合'] !== null ? autolinker.link(String(feature.properties['合']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['面積m2'] !== null ? autolinker.link(String(feature.properties['面積m2']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['名請人_所有or耕作者'] !== null ? autolinker.link(String(feature.properties['名請人_所有or耕作者']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['「る」'] !== null ? autolinker.link(String(feature.properties['「る」']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['古地図番号'] !== null ? autolinker.link(String(feature.properties['古地図番号']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['赤字'] !== null ? autolinker.link(String(feature.properties['赤字']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['備考'] !== null ? autolinker.link(String(feature.properties['備考']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['吉田村古図分析シートver2.5_篠原追記_field_15'] !== null ? autolinker.link(String(feature.properties['吉田村古図分析シートver2.5_篠原追記_field_15']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_kousakuchi_johou_9_0() {
+            return {
+                pane: 'pane_kousakuchi_johou_9',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(145,82,45,1.0)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_kousakuchi_johou_9');
+        map.getPane('pane_kousakuchi_johou_9').style.zIndex = 409;
+        map.getPane('pane_kousakuchi_johou_9').style['mix-blend-mode'] = 'normal';
+        var layer_kousakuchi_johou_9 = new L.geoJson(json_kousakuchi_johou_9, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_kousakuchi_johou_9',
+            layerName: 'layer_kousakuchi_johou_9',
+            pane: 'pane_kousakuchi_johou_9',
+            onEachFeature: pop_kousakuchi_johou_9,
+            style: style_kousakuchi_johou_9_0,
+        });
+        bounds_group.addLayer(layer_kousakuchi_johou_9);
+        map.addLayer(layer_kousakuchi_johou_9);
+        function pop_suiro_line_10(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['fid'] !== null ? autolinker.link(String(feature.properties['fid']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['id'] !== null ? autolinker.link(String(feature.properties['id']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_suiro_line_10_0() {
+            return {
+                pane: 'pane_suiro_line_10',
+                opacity: 1,
+                color: 'rgba(44,221,246,1.0)',
+                dashArray: '',
+                lineCap: 'square',
+                lineJoin: 'bevel',
+                weight: 3.0,
+                fillOpacity: 0,
+                interactive: false,
+            }
+        }
+        map.createPane('pane_suiro_line_10');
+        map.getPane('pane_suiro_line_10').style.zIndex = 410;
+        map.getPane('pane_suiro_line_10').style['mix-blend-mode'] = 'normal';
+        var layer_suiro_line_10 = new L.geoJson(json_suiro_line_10, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_suiro_line_10',
+            layerName: 'layer_suiro_line_10',
+            pane: 'pane_suiro_line_10',
+            onEachFeature: pop_suiro_line_10,
+            style: style_suiro_line_10_0,
+        });
+        bounds_group.addLayer(layer_suiro_line_10);
+        map.addLayer(layer_suiro_line_10);
+        function pop_owarihantei_11(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['fid'] !== null ? autolinker.link(String(feature.properties['fid']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['id'] !== null ? autolinker.link(String(feature.properties['id']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_owarihantei_11_0() {
+            return {
+                pane: 'pane_owarihantei_11',
+                opacity: 1,
+                color: 'rgba(35,35,35,1.0)',
+                dashArray: '',
+                lineCap: 'butt',
+                lineJoin: 'miter',
+                weight: 1.0, 
+                fill: true,
+                fillOpacity: 1,
+                fillColor: 'rgba(114,155,111,1.0)',
+                interactive: false,
+            }
+        }
+        map.createPane('pane_owarihantei_11');
+        map.getPane('pane_owarihantei_11').style.zIndex = 411;
+        map.getPane('pane_owarihantei_11').style['mix-blend-mode'] = 'normal';
+        var layer_owarihantei_11 = new L.geoJson(json_owarihantei_11, {
+            attribution: '',
+            interactive: false,
+            dataVar: 'json_owarihantei_11',
+            layerName: 'layer_owarihantei_11',
+            pane: 'pane_owarihantei_11',
+            onEachFeature: pop_owarihantei_11,
+            style: style_owarihantei_11_0,
+        });
+        bounds_group.addLayer(layer_owarihantei_11);
+        map.addLayer(layer_owarihantei_11);
+        function pop_20260906TanakaSenseiGakkou_12(feature, layer) {
+            layer.on({
+                mouseout: function(e) {
+                    if (typeof layer.closePopup == 'function') {
+                        layer.closePopup();
+                    } else {
+                        layer.eachLayer(function(feature){
+                            feature.closePopup()
+                        });
+                    }
+                },
+                mouseover: highlightFeature,
+            });
+            var popupContent = '<table>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['地物名'] !== null ? autolinker.link(String(feature.properties['地物名']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['説明'] !== null ? autolinker.link(String(feature.properties['説明']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                    <tr>\
+                        <td colspan="2">' + (feature.properties['URL'] !== null ? autolinker.link(String(feature.properties['URL']).replace(/'/g, '\'').toLocaleString()) : '') + '</td>\
+                    </tr>\
+                </table>';
+            var content = removeEmptyRowsFromPopupContent(popupContent, feature);
+			layer.on('popupopen', function(e) {
+				addClassToPopupIfMedia(content, e.popup);
+			});
+			layer.bindPopup(content, { maxHeight: 400 });
+        }
+
+        function style_20260906TanakaSenseiGakkou_12_0() {
+            return {
+                pane: 'pane_20260906TanakaSenseiGakkou_12',
+        rotationAngle: 0.0,
+        rotationOrigin: 'center center',
+        icon: L.icon({
+            iconUrl: 'markers/20260906TanakaSenseiGakkou_12.svg',
+            iconSize: [30.4, 30.4]
+        }),
+                interactive: true,
+            }
+        }
+        map.createPane('pane_20260906TanakaSenseiGakkou_12');
+        map.getPane('pane_20260906TanakaSenseiGakkou_12').style.zIndex = 412;
+        map.getPane('pane_20260906TanakaSenseiGakkou_12').style['mix-blend-mode'] = 'normal';
+        var layer_20260906TanakaSenseiGakkou_12 = new L.geoJson(json_20260906TanakaSenseiGakkou_12, {
+            attribution: '',
+            interactive: true,
+            dataVar: 'json_20260906TanakaSenseiGakkou_12',
+            layerName: 'layer_20260906TanakaSenseiGakkou_12',
+            pane: 'pane_20260906TanakaSenseiGakkou_12',
+            onEachFeature: pop_20260906TanakaSenseiGakkou_12,
+            pointToLayer: function (feature, latlng) {
+                var context = {
+                    feature: feature,
+                    variables: {}
+                };
+                return L.marker(latlng, style_20260906TanakaSenseiGakkou_12_0(feature));
+            },
+        });
+        bounds_group.addLayer(layer_20260906TanakaSenseiGakkou_12);
+        map.addLayer(layer_20260906TanakaSenseiGakkou_12);
+        var overlaysTree = [
+            {label: '<img src="legend/20260906TanakaSenseiGakkou_12.png" /> 20260906TanakaSensei — Gakkou', layer: layer_20260906TanakaSenseiGakkou_12},
+            {label: '<img src="legend/owarihantei_11.png" /> owarihantei', layer: layer_owarihantei_11},
+            {label: '<img src="legend/suiro_line_10.png" /> suiro_line', layer: layer_suiro_line_10},
+            {label: '<img src="legend/kousakuchi_johou_9.png" /> kousakuchi_johou', layer: layer_kousakuchi_johou_9},
+            {label: '<img src="legend/aomaru_8.png" /> aomaru', layer: layer_aomaru_8},
+            {label: '<img src="legend/ru_7.png" /> ru', layer: layer_ru_7},
+            {label: '<img src="legend/jyutaku_chi_6.png" /> jyutaku_chi', layer: layer_jyutaku_chi_6},
+            {label: '<img src="legend/harigami_shusei_5.png" /> harigami_shusei', layer: layer_harigami_shusei_5},
+            {label: "yoshidamurakozu_FIX", layer: layer_yoshidamurakozu_FIX_4},
+            {label: "kokudochirin_yosida_1978_modified", layer: layer_kokudochirin_yosida_1978_modified_3},
+            {label: "kokudochirin_yosida_1969_modified", layer: layer_kokudochirin_yosida_1969_modified_2},
+            {label: "kokudochirin_yosida_1950_modified", layer: layer_kokudochirin_yosida_1950_modified_1},
+            {label: "OpenStreetMap", layer: layer_OpenStreetMap_0, radioGroup: 'bm' },]
+        var lay = L.control.layers.tree(null, overlaysTree,{
+            //namedToggle: true,
+            //selectorBack: false,
+            //closedSymbol: '&#8862; &#x1f5c0;',
+            //openedSymbol: '&#8863; &#x1f5c1;',
+            //collapseAll: 'Collapse all',
+            //expandAll: 'Expand all',
+            collapsed: true,
+        });
+        lay.addTo(map);
+        setBounds();
+        L.ImageOverlay.include({
+            getBounds: function () {
+                return this._bounds;
+            }
+        });
+        </script>
+    </body>
+</html>
